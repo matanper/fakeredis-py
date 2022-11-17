@@ -4,7 +4,7 @@ from random import random
 
 from fakeredis import _msgs as msgs
 from fakeredis._commands import command, Key, Int, DbIndex, BeforeAny, CommandItem, SortFloat, delete_keys
-from fakeredis._helpers import compile_pattern, SimpleError, OK, casematch, SimpleString
+from fakeredis._helpers import compile_pattern, OK, casematch, SimpleString
 from fakeredis._zset import ZSet
 
 
@@ -69,12 +69,12 @@ class GenericCommandsMixin:
             elif casematch(b'lt', arg):
                 lt = True
             else:
-                raise SimpleError(msgs.EXPIRE_UNSUPPORTED_OPTION.format(arg))
+                raise msgs.SimpleError(msgs.EXPIRE_UNSUPPORTED_OPTION.format(arg))
         if self.version < 7 and any((nx, xx, gt, lt)):
-            raise SimpleError(msgs.WRONG_ARGS_MSG6.format('expire'))
+            raise msgs.SimpleError(msgs.WRONG_ARGS_MSG6.format('expire'))
         counter = (nx, gt, lt).count(True)
         if (counter > 1) or (nx and xx):
-            raise SimpleError(msgs.NX_XX_GT_LT_ERROR_MSG)
+            raise msgs.SimpleError(msgs.NX_XX_GT_LT_ERROR_MSG)
         if (not key
                 or (xx and key.expireat is None)
                 or (nx and key.expireat is not None)
@@ -122,7 +122,7 @@ class GenericCommandsMixin:
     @command((Key(), DbIndex))
     def move(self, key, db):
         if db == self._db_num:
-            raise SimpleError(msgs.SRC_DST_SAME_MSG)
+            raise msgs.SimpleError(msgs.SRC_DST_SAME_MSG)
         if not key or key.key in self._server.dbs[db]:
             return 0
         # TODO: what is the interaction with expiry?
@@ -159,7 +159,7 @@ class GenericCommandsMixin:
     @command((Key(), Key()))
     def rename(self, key, newkey):
         if not key:
-            raise SimpleError(msgs.NO_KEY_MSG)
+            raise msgs.SimpleError(msgs.NO_KEY_MSG)
         # TODO: check interaction with WATCH
         if newkey.key != key.key:
             newkey.value = key.value
@@ -170,7 +170,7 @@ class GenericCommandsMixin:
     @command((Key(), Key()))
     def renamenx(self, key, newkey):
         if not key:
-            raise SimpleError(msgs.NO_KEY_MSG)
+            raise msgs.SimpleError(msgs.NO_KEY_MSG)
         if newkey:
             return 0
         self.rename(key, newkey)
@@ -185,14 +185,14 @@ class GenericCommandsMixin:
                 replace = True
                 i += 1
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if key and not replace:
-            raise SimpleError(msgs.RESTORE_KEY_EXISTS)
+            raise msgs.SimpleError(msgs.RESTORE_KEY_EXISTS)
         checksum, value = value[:20], value[20:]
         if hashlib.sha1(value).digest() != checksum:
-            raise SimpleError(msgs.RESTORE_INVALID_CHECKSUM_MSG)
+            raise msgs.SimpleError(msgs.RESTORE_INVALID_CHECKSUM_MSG)
         if ttl < 0:
-            raise SimpleError(msgs.RESTORE_INVALID_TTL_MSG)
+            raise msgs.SimpleError(msgs.RESTORE_INVALID_TTL_MSG)
         if ttl == 0:
             expireat = None
         else:
@@ -218,7 +218,7 @@ class GenericCommandsMixin:
         get = []
         if key.value is not None:
             if not isinstance(key.value, (set, list, ZSet)):
-                raise SimpleError(msgs.WRONGTYPE_MSG)
+                raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
 
         while i < len(args):
             arg = args[i]
@@ -232,8 +232,8 @@ class GenericCommandsMixin:
                 try:
                     limit_start = Int.decode(args[i + 1])
                     limit_count = Int.decode(args[i + 2])
-                except SimpleError:
-                    raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                except msgs.SimpleError:
+                    raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
                 else:
                     i += 2
             elif casematch(arg, b'store') and i + 1 < len(args):
@@ -248,7 +248,7 @@ class GenericCommandsMixin:
                 get.append(args[i + 1])
                 i += 1
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
             i += 1
 
         # TODO: force sorting if the object is a set and either in Lua or

@@ -1,10 +1,6 @@
 import logging
 import re
-import threading
-import time
-import weakref
-from collections import defaultdict
-from collections.abc import MutableMapping
+from typing import List, Tuple, Dict
 
 LOGGER = logging.getLogger('fakeredis')
 REDIS_LOG_LEVELS = {
@@ -33,14 +29,6 @@ class SimpleString:
         return value
 
 
-class SimpleError(Exception):
-    """Exception that will be turned into a frontend-specific exception."""
-
-    def __init__(self, value):
-        assert isinstance(value, str)
-        self.value = value
-
-
 class NoResponse:
     """Returned by pub/sub commands to indicate that no response should be returned"""
     pass
@@ -66,6 +54,23 @@ def casenorm(s):
 
 def casematch(a, b):
     return casenorm(a) == casenorm(b)
+
+# todo:
+# def parse_args(args: List[bytes], allowed_args: Tuple[str, ...]) -> Tuple[Tuple[bool, ...], List[bytes]]:
+#     """Parse items in args, and for each allowed args,
+#     whether it is present or not and a list of remaining args
+#     >>> parse_args([b'nx', b'xx', b'gt', b'tt'], ('xx', 'nx', 'zz'))
+#     ((True, True, False), [b'gt', b'tt'])
+#
+#     """
+#     present_dict: Dict[str, bool] = {casenorm(arg.encode()): False for arg in allowed_args}
+#     remaining_args = list()
+#     for arg in args:
+#         if casenorm(arg) in present_dict:
+#             present_dict[casenorm(arg)] = True
+#         else:
+#             remaining_args.append(arg)
+#     return tuple(present_dict[casenorm(arg.encode())] for arg in allowed_args), remaining_args
 
 
 def compile_pattern(pattern):
@@ -134,139 +139,13 @@ def compile_pattern(pattern):
     regex = ''.join(parts).encode('latin-1')
     return re.compile(regex, re.S)
 
-
-class Database(MutableMapping):
-    def __init__(self, lock, *args, **kwargs):
-        self._dict = dict(*args, **kwargs)
-        self.time = 0.0
-        self._watches = defaultdict(weakref.WeakSet)  # key to set of connections
-        self.condition = threading.Condition(lock)
-        self._change_callbacks = set()
-
-    def swap(self, other):
-        self._dict, other._dict = other._dict, self._dict
-        self.time, other.time = other.time, self.time
-
-    def notify_watch(self, key):
-        for sock in self._watches.get(key, set()):
-            sock.notify_watch()
-        self.condition.notify_all()
-        for callback in self._change_callbacks:
-            callback()
-
-    def add_watch(self, key, sock):
-        self._watches[key].add(sock)
-
-    def remove_watch(self, key, sock):
-        watches = self._watches[key]
-        watches.discard(sock)
-        if not watches:
-            del self._watches[key]
-
-    def add_change_callback(self, callback):
-        self._change_callbacks.add(callback)
-
-    def remove_change_callback(self, callback):
-        self._change_callbacks.remove(callback)
-
-    def clear(self):
-        for key in self:
-            self.notify_watch(key)
-        self._dict.clear()
-
-    def expired(self, item):
-        return item.expireat is not None and item.expireat < self.time
-
-    def _remove_expired(self):
-        for key in list(self._dict):
-            item = self._dict[key]
-            if self.expired(item):
-                del self._dict[key]
-
-    def __getitem__(self, key):
-        item = self._dict[key]
-        if self.expired(item):
-            del self._dict[key]
-            raise KeyError(key)
-        return item
-
-    def __setitem__(self, key, value):
-        self._dict[key] = value
-
-    def __delitem__(self, key):
-        del self._dict[key]
-
-    def __iter__(self):
-        self._remove_expired()
-        return iter(self._dict)
-
-    def __len__(self):
-        self._remove_expired()
-        return len(self._dict)
-
-    def __hash__(self):
-        return hash(super(object, self))
-
-    def __eq__(self, other):
-        return super(object, self) == other
-
-
-def valid_response_type(value, nested=False):
-    if isinstance(value, NoResponse) and not nested:
-        return True
-    if (value is not None
-            and not isinstance(value, (bytes, SimpleString, SimpleError, int, list))):
-        return False
-    if isinstance(value, list):
-        if any(not valid_response_type(item, True) for item in value):
-            return False
-    return True
-
-
-def fix_range_string(start, end, length):
-    # Negative number handling is based on the redis source code
-    if 0 > start > end and end < 0:
-        return -1, -1
-    if start < 0:
-        start = max(0, start + length)
-    if end < 0:
-        end = max(0, end + length)
-    end = min(end, length - 1)
-    return start, end + 1
-
-
-class _DummyParser:
-    def __init__(self, socket_read_size):
-        self.socket_read_size = socket_read_size
-
-    def on_disconnect(self):
-        pass
-
-    def on_connect(self, connection):
-        pass
-
-
-class FakeSelector(object):
-    def __init__(self, sock):
-        self.sock = sock
-
-    def check_can_read(self, timeout):
-        if self.sock.responses.qsize():
-            return True
-        if timeout is not None and timeout <= 0:
-            return False
-
-        # A sleep/poll loop is easier to mock out than messing with condition
-        # variables.
-        start = time.time()
-        while True:
-            if self.sock.responses.qsize():
-                return True
-            time.sleep(0.01)
-            now = time.time()
-            if timeout is not None and now > start + timeout:
-                return False
-
-    @staticmethod
-    def check_is_ready_for_command(timeout):
-        return True
+# todo: is this needed?
+# class _DummyParser:
+#     def __init__(self, socket_read_size):
+#         self.socket_read_size = socket_read_size
+#
+#     def on_disconnect(self):
+#         pass
+#
+#     def on_connect(self, connection):
+#         pass

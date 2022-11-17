@@ -5,7 +5,7 @@ import itertools
 from fakeredis import _msgs as msgs
 from fakeredis._commands import command, Int
 from fakeredis._helpers import REDIS_LOG_LEVELS, REDIS_LOG_LEVELS_TO_LOGGING, LOGGER
-from fakeredis._helpers import SimpleError, SimpleString, casematch, casenorm, OK
+from fakeredis._helpers import SimpleString, casematch, casenorm, OK
 
 
 def _ensure_str(s, encoding, replaceerr):
@@ -20,15 +20,15 @@ def _check_for_lua_globals(lua_runtime, expected_globals):
     unexpected_globals = set(lua_runtime.globals().keys()) - expected_globals
     if len(unexpected_globals) > 0:
         unexpected = [_ensure_str(var, 'utf-8', 'replace') for var in unexpected_globals]
-        raise SimpleError(msgs.GLOBAL_VARIABLE_MSG.format(", ".join(unexpected)))
+        raise msgs.SimpleError(msgs.GLOBAL_VARIABLE_MSG.format(", ".join(unexpected)))
 
 
 def _lua_redis_log(lua_runtime, expected_globals, lvl, *args):
     _check_for_lua_globals(lua_runtime, expected_globals)
     if len(args) < 1:
-        raise SimpleError(msgs.REQUIRES_MORE_ARGS_MSG.format("redis.log()", "two"))
+        raise msgs.SimpleError(msgs.REQUIRES_MORE_ARGS_MSG.format("redis.log()", "two"))
     if lvl not in REDIS_LOG_LEVELS.values():
-        raise SimpleError(msgs.LOG_INVALID_DEBUG_LEVEL_MSG)
+        raise msgs.SimpleError(msgs.LOG_INVALID_DEBUG_LEVEL_MSG)
     msg = ' '.join([x.decode('utf-8')
                     if isinstance(x, bytes) else str(x)
                     for x in args if not isinstance(x, bool)])
@@ -49,7 +49,7 @@ class ScriptingCommandsMixin:
         else:
             # TODO: add the context
             msg = msgs.LUA_COMMAND_ARG_MSG6 if self.version < 7 else msgs.LUA_COMMAND_ARG_MSG
-            raise SimpleError(msg)
+            raise msgs.SimpleError(msg)
 
     def _convert_redis_result(self, lua_runtime, result):
         if isinstance(result, (bytes, int)):
@@ -64,7 +64,7 @@ class ScriptingCommandsMixin:
                 for item in result
             ]
             return lua_runtime.table_from(converted)
-        elif isinstance(result, SimpleError):
+        elif isinstance(result, msgs.SimpleError):
             raise result
         else:
             raise RuntimeError("Unexpected return type from redis: {}".format(type(result)))
@@ -76,13 +76,13 @@ class ScriptingCommandsMixin:
                 if key in result:
                     msg = self._convert_lua_result(result[key])
                     if not isinstance(msg, bytes):
-                        raise SimpleError(msgs.LUA_WRONG_NUMBER_ARGS_MSG)
+                        raise msgs.SimpleError(msgs.LUA_WRONG_NUMBER_ARGS_MSG)
                     if key == b'ok':
                         return SimpleString(msg)
                     elif nested:
-                        return SimpleError(msg.decode('utf-8', 'replace'))
+                        return msgs.SimpleError(msg.decode('utf-8', 'replace'))
                     else:
-                        raise SimpleError(msg.decode('utf-8', 'replace'))
+                        raise msgs.SimpleError(msg.decode('utf-8', 'replace'))
             # Convert Lua tables into lists, starting from index 1, mimicking the behavior of StrictRedis.
             result_list = []
             for index in itertools.count(1):
@@ -118,9 +118,9 @@ class ScriptingCommandsMixin:
         from lupa import LuaError, LuaRuntime, as_attrgetter
 
         if numkeys > len(keys_and_args):
-            raise SimpleError(msgs.TOO_MANY_KEYS_MSG)
+            raise msgs.SimpleError(msgs.TOO_MANY_KEYS_MSG)
         if numkeys < 0:
-            raise SimpleError(msgs.NEGATIVE_KEYS_MSG)
+            raise msgs.SimpleError(msgs.NEGATIVE_KEYS_MSG)
         sha1 = hashlib.sha1(script).hexdigest().encode()
         self._server.script_cache[sha1] = script
         lua_runtime = LuaRuntime(encoding=None, unpack_returned_tuples=True)
@@ -155,12 +155,12 @@ class ScriptingCommandsMixin:
 
         try:
             result = lua_runtime.execute(script)
-        except SimpleError as ex:
+        except msgs.SimpleError as ex:
             if self.version == 6:
-                raise SimpleError(msgs.SCRIPT_ERROR_MSG.format(sha1.decode(), ex))
-            raise SimpleError(ex.value)
+                raise msgs.SimpleError(msgs.SCRIPT_ERROR_MSG.format(sha1.decode(), ex))
+            raise msgs.SimpleError(ex.value)
         except LuaError as ex:
-            raise SimpleError(msgs.SCRIPT_ERROR_MSG.format(sha1.decode(), ex))
+            raise msgs.SimpleError(msgs.SCRIPT_ERROR_MSG.format(sha1.decode(), ex))
 
         _check_for_lua_globals(lua_runtime, expected_globals)
 
@@ -171,26 +171,26 @@ class ScriptingCommandsMixin:
         try:
             script = self._server.script_cache[sha1]
         except KeyError:
-            raise SimpleError(msgs.NO_MATCHING_SCRIPT_MSG)
+            raise msgs.SimpleError(msgs.NO_MATCHING_SCRIPT_MSG)
         return self.eval(script, numkeys, *keys_and_args)
 
     @command((bytes,), (bytes,), flags='s')
     def script(self, subcmd, *args):
         if casematch(subcmd, b'load'):
             if len(args) != 1:
-                raise SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))
+                raise msgs.SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))
             script = args[0]
             sha1 = hashlib.sha1(script).hexdigest().encode()
             self._server.script_cache[sha1] = script
             return sha1
         elif casematch(subcmd, b'exists'):
             if self.version >= 7 and len(args) == 0:
-                raise SimpleError(msgs.WRONG_ARGS_MSG7)
+                raise msgs.SimpleError(msgs.WRONG_ARGS_MSG7)
             return [int(sha1 in self._server.script_cache) for sha1 in args]
         elif casematch(subcmd, b'flush'):
             if len(args) > 1 or (len(args) == 1 and casenorm(args[0]) not in {b'sync', b'async'}):
-                raise SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))
+                raise msgs.SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))
             self._server.script_cache = {}
             return OK
         else:
-            raise SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))
+            raise msgs.SimpleError(msgs.BAD_SUBCOMMAND_MSG.format('SCRIPT'))

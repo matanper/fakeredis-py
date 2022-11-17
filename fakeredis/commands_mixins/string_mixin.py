@@ -1,8 +1,8 @@
 import math
 
 from fakeredis import _msgs as msgs
-from fakeredis._commands import (command, Key, Int, Float, delete_keys)
-from fakeredis._helpers import (OK, SimpleError, casematch, MAX_STRING_SIZE, fix_range_string)
+from fakeredis._commands import (command, Key, Int, Float, delete_keys, fix_range_string)
+from fakeredis._helpers import OK, casematch, MAX_STRING_SIZE
 
 
 class StringCommandsMixin:
@@ -13,7 +13,7 @@ class StringCommandsMixin:
     def append(self, key, value):
         old = key.get(b'')
         if len(old) + len(value) > MAX_STRING_SIZE:
-            raise SimpleError(msgs.STRING_OVERFLOW_MSG)
+            raise msgs.SimpleError(msgs.STRING_OVERFLOW_MSG)
         key.update(key.get(b'') + value)
         return len(key.value)
 
@@ -62,7 +62,7 @@ class StringCommandsMixin:
         # TODO: introduce convert_order so that we can specify amount is Float
         c = Float.decode(key.get(b'0')) + Float.decode(amount)
         if not math.isfinite(c):
-            raise SimpleError(msgs.NONFINITE_MSG)
+            raise msgs.SimpleError(msgs.NONFINITE_MSG)
         encoded = self._encodefloat(c, True)
         key.update(encoded)
         return encoded
@@ -89,7 +89,7 @@ class StringCommandsMixin:
     @command((Key(), Int, bytes))
     def psetex(self, key, ms, value):
         if ms <= 0 or self._db.time * 1000 + ms >= 2 ** 63:
-            raise SimpleError(msgs.INVALID_EXPIRE_MSG.format('psetex'))
+            raise msgs.SimpleError(msgs.INVALID_EXPIRE_MSG.format('psetex'))
         key.value = value
         key.expireat = self._db.time + ms / 1000.0
         return OK
@@ -113,12 +113,12 @@ class StringCommandsMixin:
             elif casematch(args[i], b'ex') and i + 1 < len(args):
                 ex = Int.decode(args[i + 1])
                 if ex <= 0 or (self._db.time + ex) * 1000 >= 2 ** 63:
-                    raise SimpleError(msgs.INVALID_EXPIRE_MSG.format('set'))
+                    raise msgs.SimpleError(msgs.INVALID_EXPIRE_MSG.format('set'))
                 i += 2
             elif casematch(args[i], b'px') and i + 1 < len(args):
                 px = Int.decode(args[i + 1])
                 if px <= 0 or self._db.time * 1000 + px >= 2 ** 63:
-                    raise SimpleError(msgs.INVALID_EXPIRE_MSG.format('set'))
+                    raise msgs.SimpleError(msgs.INVALID_EXPIRE_MSG.format('set'))
                 i += 2
             elif casematch(args[i], b'keepttl'):
                 keepttl = True
@@ -127,17 +127,17 @@ class StringCommandsMixin:
                 get = True
                 i += 1
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if (xx and nx) or ((px is not None) + (ex is not None) + keepttl > 1):
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if nx and get and self.version < 7:
             # The command docs say this is allowed from Redis 7.0.
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
 
         old_value = None
         if get:
             if key.value is not None and type(key.value) is not bytes:
-                raise SimpleError(msgs.WRONGTYPE_MSG)
+                raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
             old_value = key.value
 
         if nx and key:
@@ -157,7 +157,7 @@ class StringCommandsMixin:
     @command((Key(), Int, bytes))
     def setex(self, key, seconds, value):
         if seconds <= 0 or (self._db.time + seconds) * 1000 >= 2 ** 63:
-            raise SimpleError(msgs.INVALID_EXPIRE_MSG.format('setex'))
+            raise msgs.SimpleError(msgs.INVALID_EXPIRE_MSG.format('setex'))
         key.value = value
         key.expireat = self._db.time + seconds
         return OK
@@ -172,11 +172,11 @@ class StringCommandsMixin:
     @command((Key(bytes), Int, bytes))
     def setrange(self, key, offset, value):
         if offset < 0:
-            raise SimpleError(msgs.INVALID_OFFSET_MSG)
+            raise msgs.SimpleError(msgs.INVALID_OFFSET_MSG)
         elif not value:
             return len(key.get(b''))
         elif offset + len(value) > MAX_STRING_SIZE:
-            raise SimpleError(msgs.STRING_OVERFLOW_MSG)
+            raise msgs.SimpleError(msgs.STRING_OVERFLOW_MSG)
         else:
             out = key.get(b'')
             if len(out) < offset:

@@ -1,6 +1,6 @@
 from fakeredis import _msgs as msgs
 from fakeredis._commands import (command, Key)
-from fakeredis._helpers import (OK, SimpleError)
+from fakeredis._helpers import OK
 
 
 class TransactionsCommandsMixin:
@@ -24,7 +24,7 @@ class TransactionsCommandsMixin:
     @command((), flags='s')
     def discard(self):
         if self._transaction is None:
-            raise SimpleError(msgs.WITHOUT_MULTI_MSG.format('DISCARD'))
+            raise msgs.SimpleError(msgs.WITHOUT_MULTI_MSG.format('DISCARD'))
         self._transaction = None
         self._transaction_failed = False
         self._clear_watches()
@@ -33,11 +33,11 @@ class TransactionsCommandsMixin:
     @command((), name='exec', flags='s')
     def exec_(self):
         if self._transaction is None:
-            raise SimpleError(msgs.WITHOUT_MULTI_MSG.format('EXEC'))
+            raise msgs.SimpleError(msgs.WITHOUT_MULTI_MSG.format('EXEC'))
         if self._transaction_failed:
             self._transaction = None
             self._clear_watches()
-            raise SimpleError(msgs.EXECABORT_MSG)
+            raise msgs.SimpleError(msgs.EXECABORT_MSG)
         transaction = self._transaction
         self._transaction = None
         self._transaction_failed = False
@@ -50,7 +50,7 @@ class TransactionsCommandsMixin:
             try:
                 self._in_transaction = True
                 ans = self._run_command(func, sig, args, False)
-            except SimpleError as exc:
+            except msgs.SimpleError as exc:
                 ans = exc
             finally:
                 self._in_transaction = False
@@ -60,7 +60,7 @@ class TransactionsCommandsMixin:
     @command((), flags='s')
     def multi(self):
         if self._transaction is not None:
-            raise SimpleError(msgs.MULTI_NESTED_MSG)
+            raise msgs.SimpleError(msgs.MULTI_NESTED_MSG)
         self._transaction = []
         self._transaction_failed = False
         return OK
@@ -73,7 +73,7 @@ class TransactionsCommandsMixin:
     @command((Key(),), (Key(),), flags='s')
     def watch(self, *keys):
         if self._transaction is not None:
-            raise SimpleError(msgs.WATCH_INSIDE_MULTI_MSG)
+            raise msgs.SimpleError(msgs.WATCH_INSIDE_MULTI_MSG)
         for key in keys:
             if key not in self._watches:
                 self._watches.add((key.key, self._db))

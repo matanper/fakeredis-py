@@ -51,3 +51,11 @@ RESTORE_INVALID_CHECKSUM_MSG = "ERR DUMP payload version or checksum are wrong"
 RESTORE_INVALID_TTL_MSG = "ERR Invalid TTL value, must be >= 0"
 
 FLAG_NO_SCRIPT = 's'  # Command not allowed in scripts
+
+
+class SimpleError(Exception):
+    """Exception that will be turned into a frontend-specific exception."""
+
+    def __init__(self, value):
+        assert isinstance(value, str)
+        self.value = value

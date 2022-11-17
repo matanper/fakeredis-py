@@ -7,7 +7,7 @@ from typing import Union, Optional
 
 from fakeredis import _msgs as msgs
 from fakeredis._commands import (command, Key, Int, Float, CommandItem, Timeout, ScoreTest, StringTest, fix_range)
-from fakeredis._helpers import (SimpleError, casematch, casenorm, )
+from fakeredis._helpers import casematch, casenorm
 from fakeredis._zset import ZSet
 
 
@@ -98,14 +98,14 @@ class SortedSetCommandsMixin:
             break
 
         if param_val['nx'] and param_val['xx']:
-            raise SimpleError(msgs.ZADD_NX_XX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.ZADD_NX_XX_ERROR_MSG)
         if [param_val['nx'], param_val['gt'], param_val['lt']].count(True) > 1:
-            raise SimpleError(msgs.ZADD_NX_GT_LT_ERROR_MSG)
+            raise msgs.SimpleError(msgs.ZADD_NX_GT_LT_ERROR_MSG)
         elements = args[i:]
         if not elements or len(elements) % 2 != 0:
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if param_val['incr'] and len(elements) != 2:
-            raise SimpleError(msgs.ZADD_INCR_LEN_ERROR_MSG)
+            raise msgs.SimpleError(msgs.ZADD_INCR_LEN_ERROR_MSG)
         # Parse all scores first, before updating
         items = [
             (0.0 + Float.decode(elements[j]) if self.version >= 7 else Float.decode(elements[j]), elements[j + 1])
@@ -157,7 +157,7 @@ class SortedSetCommandsMixin:
         except TypeError:
             score = increment
         if math.isnan(score):
-            raise SimpleError(msgs.SCORE_NAN_MSG)
+            raise msgs.SimpleError(msgs.SCORE_NAN_MSG)
         key.value[member] = score
         key.updated()
         # For some reason, here it does not ignore the version
@@ -179,7 +179,7 @@ class SortedSetCommandsMixin:
             elif casematch(arg, b'byscore'):
                 byscore = True
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if byscore:
             items = zset.irange_score(start.lower_bound, stop.upper_bound, reverse=reverse)
         else:
@@ -202,7 +202,7 @@ class SortedSetCommandsMixin:
     def _zrangebylex(self, key, _min, _max, reverse, *args):
         if args:
             if len(args) != 3 or not casematch(args[0], b'limit'):
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
             offset = Int.decode(args[1])
             count = Int.decode(args[2])
         else:
@@ -237,7 +237,7 @@ class SortedSetCommandsMixin:
                 count = Int.decode(args[i + 2])
                 i += 3
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         zset = key.value
         items = list(zset.irange_score(_min.lower_bound, _max.upper_bound, reverse=reverse))
         items = self._limit_items(items, offset, count)
@@ -320,13 +320,13 @@ class SortedSetCommandsMixin:
         elif isinstance(value, ZSet):
             return value
         else:
-            raise SimpleError(msgs.WRONGTYPE_MSG)
+            raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
 
     def _zunioninter(self, func, dest, numkeys, *args):
         if numkeys < 1:
-            raise SimpleError(msgs.ZUNIONSTORE_KEYS_MSG)
+            raise msgs.SimpleError(msgs.ZUNIONSTORE_KEYS_MSG)
         if numkeys > len(args):
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         aggregate = b'sum'
         sets = []
         for i in range(numkeys):
@@ -343,10 +343,10 @@ class SortedSetCommandsMixin:
             elif casematch(arg, b'aggregate') and i + 1 < len(args):
                 aggregate = casenorm(args[i + 1])
                 if aggregate not in (b'sum', b'min', b'max'):
-                    raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                    raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
                 i += 2
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
 
         out_members = set(sets[0])
         for s in sets[1:]:

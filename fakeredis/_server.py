@@ -5,14 +5,117 @@ import time
 import warnings
 import weakref
 from collections import defaultdict
+from collections.abc import MutableMapping
 
 import redis
 
 from fakeredis._fakesocket import FakeSocket
-from fakeredis._helpers import (Database, FakeSelector, LOGGER)
+from fakeredis._helpers import (LOGGER)
 from . import _msgs as msgs
 
 LOGGER = LOGGER
+
+
+class Database(MutableMapping):
+    def __init__(self, lock, *args, **kwargs):
+        self._dict = dict(*args, **kwargs)
+        self.time = 0.0
+        self._watches = defaultdict(weakref.WeakSet)  # key to set of connections
+        self.condition = threading.Condition(lock)
+        self._change_callbacks = set()
+
+    def swap(self, other):
+        self._dict, other._dict = other._dict, self._dict
+        self.time, other.time = other.time, self.time
+
+    def notify_watch(self, key):
+        for sock in self._watches.get(key, set()):
+            sock.notify_watch()
+        self.condition.notify_all()
+        for callback in self._change_callbacks:
+            callback()
+
+    def add_watch(self, key, sock):
+        self._watches[key].add(sock)
+
+    def remove_watch(self, key, sock):
+        watches = self._watches[key]
+        watches.discard(sock)
+        if not watches:
+            del self._watches[key]
+
+    def add_change_callback(self, callback):
+        self._change_callbacks.add(callback)
+
+    def remove_change_callback(self, callback):
+        self._change_callbacks.remove(callback)
+
+    def clear(self):
+        for key in self:
+            self.notify_watch(key)
+        self._dict.clear()
+
+    def expired(self, item):
+        return item.expireat is not None and item.expireat < self.time
+
+    def _remove_expired(self):
+        for key in list(self._dict):
+            item = self._dict[key]
+            if self.expired(item):
+                del self._dict[key]
+
+    def __getitem__(self, key):
+        item = self._dict[key]
+        if self.expired(item):
+            del self._dict[key]
+            raise KeyError(key)
+        return item
+
+    def __setitem__(self, key, value):
+        self._dict[key] = value
+
+    def __delitem__(self, key):
+        del self._dict[key]
+
+    def __iter__(self):
+        self._remove_expired()
+        return iter(self._dict)
+
+    def __len__(self):
+        self._remove_expired()
+        return len(self._dict)
+
+    def __hash__(self):
+        return hash(super(object, self))
+
+    def __eq__(self, other):
+        return super(object, self) == other
+
+
+class FakeSelector(object):
+    def __init__(self, sock):
+        self.sock = sock
+
+    def check_can_read(self, timeout):
+        if self.sock.responses.qsize():
+            return True
+        if timeout is not None and timeout <= 0:
+            return False
+
+        # A sleep/poll loop is easier to mock out than messing with condition
+        # variables.
+        start = time.time()
+        while True:
+            if self.sock.responses.qsize():
+                return True
+            time.sleep(0.01)
+            now = time.time()
+            if timeout is not None and now > start + timeout:
+                return False
+
+    @staticmethod
+    def check_is_ready_for_command(timeout):
+        return True
 
 
 class FakeServer:

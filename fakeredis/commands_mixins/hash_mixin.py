@@ -3,7 +3,7 @@ import math
 
 from fakeredis import _msgs as msgs
 from fakeredis._commands import command, Key, Hash, Int, Float
-from fakeredis._helpers import SimpleError, OK
+from fakeredis._helpers import OK
 
 
 class HashCommandsMixin:
@@ -41,7 +41,7 @@ class HashCommandsMixin:
     def hincrbyfloat(self, key, field, amount):
         c = Float.decode(key.value.get(field, b'0')) + Float.decode(amount)
         if not math.isfinite(c):
-            raise SimpleError(msgs.NONFINITE_MSG)
+            raise msgs.SimpleError(msgs.NONFINITE_MSG)
         encoded = self._encodefloat(c, True)
         key.value[field] = encoded
         key.updated()

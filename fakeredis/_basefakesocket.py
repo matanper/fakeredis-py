@@ -7,12 +7,24 @@ import redis
 
 from . import _msgs as msgs
 from ._commands import (Int, Float)
-from ._helpers import (
-    SimpleError, valid_response_type, SimpleString, NoResponse, casematch,
-    compile_pattern, QUEUED)
+from ._helpers import (SimpleString, NoResponse, casematch, compile_pattern, QUEUED)
+
+
+def valid_response_type(value, nested=False):
+    if isinstance(value, NoResponse) and not nested:
+        return True
+    if (value is not None
+            and not isinstance(value, (bytes, SimpleString, msgs.SimpleError, int, list))):
+        return False
+    if isinstance(value, list):
+        if any(not valid_response_type(item, True) for item in value):
+            return False
+    return True
 
 
 class BaseFakeSocket:
+    _connection_error_class = redis.ConnectionError
+
     def __init__(self, server, *args, **kwargs):
         super(BaseFakeSocket, self).__init__(*args, **kwargs)
         self._server = server
@@ -118,7 +130,7 @@ class BaseFakeSocket:
             else:
                 args, command_items = ret
                 if from_script and msgs.FLAG_NO_SCRIPT in sig.flags:
-                    raise SimpleError(msgs.COMMAND_IN_SCRIPT_MSG)
+                    raise msgs.SimpleError(msgs.COMMAND_IN_SCRIPT_MSG)
                 if self._pubsub and sig.name not in [
                     'ping',
                     'subscribe',
@@ -127,10 +139,10 @@ class BaseFakeSocket:
                     'punsubscribe',
                     'quit'
                 ]:
-                    raise SimpleError(msgs.BAD_COMMAND_IN_PUBSUB_MSG)
+                    raise msgs.SimpleError(msgs.BAD_COMMAND_IN_PUBSUB_MSG)
                 result = func(*args)
                 assert valid_response_type(result)
-        except SimpleError as exc:
+        except msgs.SimpleError as exc:
             result = exc
         for command_item in command_items:
             command_item.writeback()
@@ -140,12 +152,12 @@ class BaseFakeSocket:
         return redis.connection.BaseParser().parse_error(error.value)
 
     def _decode_result(self, result):
-        """Convert SimpleString and SimpleError, recursively"""
+        """Convert SimpleString and msgs.SimpleError, recursively"""
         if isinstance(result, list):
             return [self._decode_result(r) for r in result]
         elif isinstance(result, SimpleString):
             return result.value
-        elif isinstance(result, SimpleError):
+        elif isinstance(result, msgs.SimpleError):
             return self._decode_error(result)
         else:
             return result
@@ -189,7 +201,7 @@ class BaseFakeSocket:
         if name.startswith('_') or not func or not hasattr(func, '_fakeredis_sig'):
             # redis remaps \r or \n in an error to ' ' to make it legal protocol
             clean_name = name.replace('\r', ' ').replace('\n', ' ')
-            raise SimpleError(msgs.UNKNOWN_COMMAND_MSG.format(clean_name))
+            raise msgs.SimpleError(msgs.UNKNOWN_COMMAND_MSG.format(clean_name))
         return func, func_name
 
     def sendall(self, data):
@@ -228,7 +240,7 @@ class BaseFakeSocket:
                     result = QUEUED
                 else:
                     result = self._run_command(func, sig, fields[1:], False)
-        except SimpleError as exc:
+        except msgs.SimpleError as exc:
             if self._transaction is not None:
                 # TODO: should not apply if the exception is from _run_command
                 # e.g. watch inside multi
@@ -260,18 +272,18 @@ class BaseFakeSocket:
         _type = None
         count = 10
         if len(args) % 2 != 0:
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         for i in range(0, len(args), 2):
             if casematch(args[i], b'match'):
                 pattern = args[i + 1]
             elif casematch(args[i], b'count'):
                 count = Int.decode(args[i + 1])
                 if count <= 0:
-                    raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                    raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
             elif casematch(args[i], b'type'):
                 _type = args[i + 1]
             else:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
 
         if cursor >= len(keys):
             return [0, []]

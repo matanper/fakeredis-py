@@ -1,6 +1,5 @@
 from fakeredis import _msgs as msgs
-from fakeredis._commands import (command, Key, Int, BitOffset, BitValue)
-from fakeredis._helpers import (SimpleError, fix_range_string)
+from fakeredis._commands import (command, Key, Int, BitOffset, BitValue, fix_range_string)
 
 
 class BitmapCommandsMixin:
@@ -13,7 +12,7 @@ class BitmapCommandsMixin:
         # we can't declare them as Int.
         if args:
             if len(args) != 2:
-                raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+                raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
             start = Int.decode(args[0])
             end = Int.decode(args[1])
             start, end = fix_range_string(start, end, len(key.value))

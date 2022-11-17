@@ -3,8 +3,7 @@ import functools
 from fakeredis import _msgs as msgs
 from fakeredis._commands import (
     Key, command, Int, CommandItem, Timeout, fix_range)
-from fakeredis._helpers import (
-    OK, SimpleError, SimpleString, casematch)
+from fakeredis._helpers import OK, SimpleString, casematch
 
 
 def _list_pop(get_slice, key, *args):
@@ -17,15 +16,15 @@ def _list_pop(get_slice, key, *args):
     # behaviours described in https://github.com/redis/redis/issues/9680.
     count = 1
     if len(args) > 1:
-        raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+        raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
     elif len(args) == 1:
         count = args[0]
         if count < 0:
-            raise SimpleError(msgs.INDEX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.INDEX_ERROR_MSG)
     if not key:
         return None
     elif type(key.value) != list:
-        raise SimpleError(msgs.WRONGTYPE_MSG)
+        raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
     slc = get_slice(count)
     ret = key.value[slc]
     del key.value[slc]
@@ -43,7 +42,7 @@ class ListCommandsMixin:
             item = CommandItem(key, self._db, item=self._db.get(key), default=[])
             if not isinstance(item.value, list):
                 if first_pass:
-                    raise SimpleError(msgs.WRONGTYPE_MSG)
+                    raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
                 else:
                     continue
             if item.value:
@@ -70,14 +69,14 @@ class ListCommandsMixin:
         src = CommandItem(source, self._db, item=self._db.get(source), default=[])
         if not isinstance(src.value, list):
             if first_pass:
-                raise SimpleError(msgs.WRONGTYPE_MSG)
+                raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
             else:
                 return None
         if not src.value:
             return None  # Empty list
         dst = CommandItem(destination, self._db, item=self._db.get(destination), default=[])
         if not isinstance(dst.value, list):
-            raise SimpleError(msgs.WRONGTYPE_MSG)
+            raise msgs.SimpleError(msgs.WRONGTYPE_MSG)
         el = src.value.pop()
         dst.value.insert(0, el)
         src.updated()
@@ -103,7 +102,7 @@ class ListCommandsMixin:
     @command((Key(list), bytes, bytes, bytes))
     def linsert(self, key, where, pivot, value):
         if not casematch(where, b'before') and not casematch(where, b'after'):
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if not key:
             return 0
         else:
@@ -124,9 +123,9 @@ class ListCommandsMixin:
     @command((Key(list, None), Key(list), SimpleString, SimpleString))
     def lmove(self, first_list, second_list, src, dst):
         if src not in [b'LEFT', b'RIGHT']:
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         if dst not in [b'LEFT', b'RIGHT']:
-            raise SimpleError(msgs.SYNTAX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.SYNTAX_ERROR_MSG)
         el = self.rpop(first_list) if src == b'RIGHT' else self.lpop(first_list)
         self.lpush(second_list, el) if dst == b'LEFT' else self.rpush(second_list, el)
         return el
@@ -177,12 +176,12 @@ class ListCommandsMixin:
     @command((Key(list), Int, bytes))
     def lset(self, key, index, value):
         if not key:
-            raise SimpleError(msgs.NO_KEY_MSG)
+            raise msgs.SimpleError(msgs.NO_KEY_MSG)
         try:
             key.value[index] = value
             key.updated()
         except IndexError:
-            raise SimpleError(msgs.INDEX_ERROR_MSG)
+            raise msgs.SimpleError(msgs.INDEX_ERROR_MSG)
         return OK
 
     @command((Key(list), Int, Int))
